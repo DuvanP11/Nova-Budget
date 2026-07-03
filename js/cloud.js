@@ -3,8 +3,8 @@
    Sin backend, sin base de datos. Requiere un OAuth Client ID (ver README).
 */
 const Cloud = (() => {
-  // ⬇️ Pega aquí tu OAuth Client ID de Google (termina en .apps.googleusercontent.com)
-  const CLIENT_ID = '';
+  // OAuth Client ID de Google (público, no es secreto)
+  const CLIENT_ID = '105955007977-5iivvngbjp0jb7gvf69ts42advseef9l.apps.googleusercontent.com';
   const SCOPES = 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/userinfo.email';
   const FILENAME = 'nova-budget-data.json';
   const LS = 'bolsillo.cloud';
