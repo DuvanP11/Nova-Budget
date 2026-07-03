@@ -580,9 +580,28 @@ const UI = (() => {
   }
 
   /* ---------- AJUSTES (sheet) ---------- */
+  function cloudSection() {
+    if (typeof Cloud === 'undefined' || !Cloud.enabled()) return '';  // se muestra al configurar el Client ID
+    if (Cloud.connected()) {
+      const ls = Cloud.lastSync ? new Date(Cloud.lastSync).toLocaleString(Store.settings.locale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'nunca';
+      return `<div class="card" style="margin-bottom:14px">
+        <div class="spread"><div style="min-width:0"><div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">☁️ ${esc(Cloud.email || 'Conectado')}</div>
+          <div class="small muted">Última sincronización: ${ls}</div></div><span class="pill paid">✓ Nube</span></div>
+        <div class="form-actions" style="margin-top:12px"><button type="button" class="btn soft block" data-action="cloud-sync">🔄 Sincronizar</button>
+          <button type="button" class="btn ghost block" data-action="cloud-logout">Cerrar sesión</button></div>
+      </div>`;
+    }
+    return `<div class="card" style="margin-bottom:14px">
+      <div style="font-weight:700;margin-bottom:4px">☁️ Guardar en tu cuenta de Google</div>
+      <div class="small muted" style="margin-bottom:12px">Respalda y sincroniza tus datos entre tu celular y tu PC. Quedan en tu propio Google Drive, privados.</div>
+      <button type="button" class="btn primary block" data-action="cloud-login">Iniciar sesión con Google</button>
+    </div>`;
+  }
+
   function settingsSheet() {
     const st = Store.settings;
     openSheet(`<h2>⚙️ Ajustes</h2>
+    ${cloudSection()}
     <form data-form="settings">
       <div class="field"><label>Moneda</label><select name="currency">${opts([{ v: 'COP', t: 'Peso colombiano (COP)' }, { v: 'MXN', t: 'Peso mexicano (MXN)' }, { v: 'USD', t: 'Dólar (USD)' }, { v: 'EUR', t: 'Euro (EUR)' }, { v: 'PEN', t: 'Sol (PEN)' }, { v: 'CLP', t: 'Peso chileno (CLP)' }, { v: 'ARS', t: 'Peso argentino (ARS)' }], st.currency)}</select></div>
       <div class="field"><label>Regla de ahorro</label><select name="savingsMode">${opts([{ v: 'percent', t: 'Porcentaje del ingreso' }, { v: 'fixed', t: 'Monto fijo' }], st.savingsMode)}</select></div>

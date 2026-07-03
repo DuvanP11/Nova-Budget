@@ -50,6 +50,9 @@
     'del-envelope': el => { if (confirm('¿Eliminar este sobre?')) { Store.removeEnvelope(el.dataset.id); UI.closeSheet(); render(); UI.toast('Sobre eliminado'); } },
     'add-env-item': el => UI.envItemForm(el.dataset.env),
     'del-env-item': el => { Store.removeEnvItem(el.dataset.env, el.dataset.id); UI.envelopeDetail(el.dataset.env); },
+    'cloud-login': async () => { UI.toast('Abriendo Google…'); try { await Cloud.connect(true); render(); UI.settingsSheet(); UI.toast('Conectado ✓'); } catch (e) { console.warn(e); UI.toast('No se pudo conectar con Google'); } },
+    'cloud-logout': () => { Cloud.disconnect(); UI.settingsSheet(); UI.toast('Sesión cerrada'); },
+    'cloud-sync': async () => { UI.toast('Sincronizando…'); try { await Cloud.syncNow(); render(); UI.settingsSheet(); UI.toast('Sincronizado ✓'); } catch (e) { console.warn(e); UI.toast('Error al sincronizar'); } },
     'add-budget': () => UI.budgetForm(),
     'edit-budget': el => UI.budgetForm(el.dataset.key),
     'del-budget': el => { Store.removeBudget(el.dataset.key); UI.closeSheet(); render(); UI.toast('Presupuesto eliminado'); },
@@ -162,4 +165,6 @@
   render();
   if (!Store.settings.onboarded && Store.state.incomes.length === 0) UI.onboarding();
   if (Store.settings.notif) Notif.schedule();
+  if (typeof Cloud !== 'undefined') Cloud.init();
+  window.addEventListener('cloud:changed', () => render());
 })();

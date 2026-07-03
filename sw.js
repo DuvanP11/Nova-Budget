@@ -1,9 +1,9 @@
 /* ===== Nova Budget — Service Worker (offline + notificaciones) ===== */
-const CACHE = 'nova-budget-v8';
+const CACHE = 'nova-budget-v9';
 const ASSETS = [
   './', './index.html',
   './css/styles.css',
-  './js/store.js', './js/charts.js', './js/notifications.js', './js/ui.js', './js/app.js',
+  './js/store.js', './js/charts.js', './js/notifications.js', './js/cloud.js', './js/ui.js', './js/app.js',
   './manifest.webmanifest', './icons/icon.svg',
 ];
 

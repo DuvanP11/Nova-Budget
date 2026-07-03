@@ -44,7 +44,8 @@ const Store = (() => {
     }
     return base;
   }
-  function save() {
+  function save(keepStamp) {
+    if (!keepStamp) state._updatedAt = Date.now();   // para sincronización (última escritura gana)
     try { localStorage.setItem(KEY, JSON.stringify(state)); }
     catch (e) { console.error('No se pudo guardar', e); }
     window.dispatchEvent(new CustomEvent('store:changed'));
@@ -401,7 +402,7 @@ const Store = (() => {
   function importJSON(text) {
     const data = JSON.parse(text);
     state = deepMerge(structuredClone(DEFAULTS), data);
-    save(); return true;
+    save(true); return true;   // conserva _updatedAt del origen
   }
   function reset() { state = structuredClone(DEFAULTS); save(); }
 
