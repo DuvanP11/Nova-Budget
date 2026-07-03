@@ -1,0 +1,17 @@
+# Sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editores
+.vscode/
+.idea/
+*.swp
+
+# Dependencias (por si más adelante se agregan)
+node_modules/
+dist/
+.cache/
+
+# Datos locales / temporales
+*.log

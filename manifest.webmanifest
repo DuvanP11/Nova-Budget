@@ -1,0 +1,17 @@
+{
+  "name": "Nova Budget — Salud financiera",
+  "short_name": "Nova Budget",
+  "description": "Controla tus gastos fijos y variables, programa tus pagos, recibe alertas y ahorra un mínimo cada mes.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#070A0E",
+  "theme_color": "#070A0E",
+  "lang": "es",
+  "categories": ["finance", "productivity", "lifestyle"],
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
