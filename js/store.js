@@ -11,6 +11,7 @@ const Store = (() => {
       alertDays: 3,             // avisar N días antes
       budgetAlertPct: 80,       // avisar al llegar a este % del presupuesto
       notif: false,
+      entered: false,           // ya pasó la pantalla de bienvenida
       onboarded: false,
     },
     budgets: {},   // { '<scope>': montoTope }  scope: 'total' | 'market:total' | 'market:<cat>' | 'var:<cat>' | 'fixed:<cat>'

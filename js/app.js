@@ -8,6 +8,9 @@
   };
 
   function render() {
+    const gate = !(Store.settings.entered || Store.settings.onboarded);
+    document.body.classList.toggle('gate', gate);
+    if (gate) { $('#view').innerHTML = UI.welcome(); UI.hookWelcome(); window.scrollTo(0, 0); return; }
     $('#view').innerHTML = VIEWS[route]();
     document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.route === route));
     $('#view').scrollTo?.(0, 0); window.scrollTo(0, 0);
@@ -50,6 +53,8 @@
     'del-envelope': el => { if (confirm('¿Eliminar este sobre?')) { Store.removeEnvelope(el.dataset.id); UI.closeSheet(); render(); UI.toast('Sobre eliminado'); } },
     'add-env-item': el => UI.envItemForm(el.dataset.env),
     'del-env-item': el => { Store.removeEnvItem(el.dataset.env, el.dataset.id); UI.envelopeDetail(el.dataset.env); },
+    'enter-local': () => { Store.settings.entered = true; Store.save(); render(); if (!Store.state.incomes.length && !Store.settings.onboarded) UI.onboarding(); },
+    'enter-google': async () => { UI.toast('Abriendo Google…'); try { await Cloud.connect(true); Store.settings.entered = true; Store.save(); render(); if (!Store.state.incomes.length && !Store.settings.onboarded) UI.onboarding(); UI.toast('Conectado ✓'); } catch (e) { console.warn(e); UI.toast('No se pudo conectar con Google'); } },
     'cloud-login': async () => { UI.toast('Abriendo Google…'); try { await Cloud.connect(true); render(); UI.settingsSheet(); UI.toast('Conectado ✓'); } catch (e) { console.warn(e); UI.toast('No se pudo conectar con Google'); } },
     'cloud-logout': () => { Cloud.disconnect(); UI.settingsSheet(); UI.toast('Sesión cerrada'); },
     'cloud-sync': async () => { UI.toast('Sincronizando…'); try { await Cloud.syncNow(); render(); UI.settingsSheet(); UI.toast('Sincronizado ✓'); } catch (e) { console.warn(e); UI.toast('Error al sincronizar'); } },
@@ -163,7 +168,7 @@
   }
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { updateChrome(); if (Store.settings.notif) Notif.checkAndNotify(); } });
   render();
-  if (!Store.settings.onboarded && Store.state.incomes.length === 0) UI.onboarding();
+  if (!document.body.classList.contains('gate') && !Store.settings.onboarded && Store.state.incomes.length === 0) UI.onboarding();
   if (Store.settings.notif) Notif.schedule();
   if (typeof Cloud !== 'undefined') Cloud.init();
   window.addEventListener('cloud:changed', () => render());

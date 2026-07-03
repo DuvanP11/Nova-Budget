@@ -222,3 +222,51 @@ a{color:var(--lime)}
 .mini{width:36px;height:36px;border-radius:11px;border:1px solid var(--line);background:var(--card);font-size:15px;
   display:grid;place-items:center;transition:.15s;flex:none}
 .mini:active{background:var(--lime-t);border-color:var(--lime);color:var(--lime)}
+
+/* ============ Pantalla de bienvenida / login ============ */
+body.gate{padding-bottom:0}
+body.gate .appbar,body.gate .bottomnav,body.gate .fab{display:none!important}
+body.gate .view{max-width:none;margin:0;padding:0}
+
+.welcome{position:relative;z-index:1;min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;justify-content:center;
+  max-width:520px;margin:0 auto;padding:34px 26px calc(30px + env(safe-area-inset-bottom));overflow:hidden}
+.w-bg{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none}
+.w-orb{position:absolute;border-radius:50%;will-change:transform;transition:transform .3s ease-out}
+.w-orb.a{width:70vw;height:70vw;max-width:520px;max-height:520px;background:radial-gradient(circle,rgba(198,255,61,.42),transparent 68%);top:-14%;left:-18%;animation:floatA 15s ease-in-out infinite}
+.w-orb.b{width:62vw;height:62vw;max-width:480px;max-height:480px;background:radial-gradient(circle,rgba(34,197,139,.4),transparent 68%);bottom:-16%;right:-16%;animation:floatB 19s ease-in-out infinite}
+.w-orb.c{width:44vw;height:44vw;max-width:340px;max-height:340px;background:radial-gradient(circle,rgba(90,162,255,.3),transparent 68%);top:32%;right:6%;animation:floatC 17s ease-in-out infinite}
+@keyframes floatA{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(7%,5%) scale(1.09)}}
+@keyframes floatB{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-6%,-6%) scale(1.12)}}
+@keyframes floatC{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-5%,6%) scale(1.06)}}
+
+.w-content{position:relative;z-index:1;animation:fadeUp .6s ease both}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.w-logo{width:74px;height:74px;border-radius:22px;display:grid;place-items:center;font-family:var(--font-head);
+  font-weight:800;font-size:38px;color:#06210b;background:linear-gradient(140deg,var(--lime),#7be000);
+  box-shadow:0 0 48px rgba(198,255,61,.5);animation:logoPulse 3.2s ease-in-out infinite;margin-bottom:22px}
+@keyframes logoPulse{0%,100%{box-shadow:0 0 38px rgba(198,255,61,.4);transform:translateY(0)}50%{box-shadow:0 0 68px rgba(198,255,61,.66);transform:translateY(-5px)}}
+.w-title{font-family:var(--font-head);font-size:34px;font-weight:700;letter-spacing:-.03em;line-height:1.05}
+.w-title b{color:var(--lime)}
+.w-tag{color:var(--ink-dim);font-size:15px;line-height:1.5;margin-top:12px;max-width:32ch}
+
+.w-chart{display:flex;align-items:flex-end;gap:8px;height:58px;margin:26px 0 8px}
+.w-chart i{width:13px;height:100%;border-radius:6px 6px 3px 3px;transform:scaleY(0);transform-origin:bottom;
+  background:linear-gradient(180deg,var(--lime),var(--green));opacity:.9;animation:growBar .7s cubic-bezier(.2,.9,.3,1) forwards}
+@keyframes growBar{to{transform:scaleY(var(--h,.6))}}
+
+.w-feats{margin:14px 0 24px;display:flex;flex-direction:column;gap:4px}
+.w-feat{display:flex;align-items:center;gap:13px;padding:9px 0;opacity:0;animation:riseIn .55s ease forwards}
+.w-feat .fi{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;font-size:21px;
+  background:var(--card);border:1px solid var(--line);flex:none}
+.w-feat .ft{font-size:13.5px;color:var(--muted);line-height:1.35}
+.w-feat .ft b{color:var(--ink);font-weight:700;display:block;font-family:var(--font-head);font-size:14.5px}
+@keyframes riseIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+
+.w-actions{display:flex;flex-direction:column;gap:11px}
+.gbtn{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;background:#fff;color:#1f2328;
+  border:none;border-radius:14px;padding:15px;font-family:var(--font-head);font-weight:600;font-size:15px;
+  box-shadow:0 8px 24px rgba(0,0,0,.35);transition:.15s}
+.gbtn:active{transform:scale(.98)}
+.gbtn svg{width:20px;height:20px;flex:none}
+.w-note{color:var(--muted);font-size:12px;text-align:center;line-height:1.5;margin-top:8px}
+.w-note b{color:var(--ink-dim)}

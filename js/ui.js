@@ -633,6 +633,47 @@ const UI = (() => {
     </form>`);
   }
 
+  /* =========================================================
+     PANTALLA DE BIENVENIDA / LOGIN
+     ========================================================= */
+  function welcome() {
+    const hasGoogle = (typeof Cloud !== 'undefined' && Cloud.enabled());
+    const G = `<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>`;
+    const feats = [
+      ['📊', 'Estadísticas claras', 'Mira en qué se te va la plata, con porcentajes'],
+      ['🔔', 'Alertas de pago', 'Te avisamos antes de cada vencimiento'],
+      ['🐷', 'Ahorro obligatorio', 'Aparta un mínimo cada mes, automático'],
+    ];
+    const bars = [.45, .7, .52, .9, .62, .8];
+    return `
+    <div class="w-bg"><span class="w-orb a"></span><span class="w-orb b"></span><span class="w-orb c"></span></div>
+    <div class="welcome"><div class="w-content">
+      <div class="w-logo">N</div>
+      <h1 class="w-title">Toma el control<br>de tu <b>plata</b>.</h1>
+      <p class="w-tag">Organiza tus gastos, programa tus pagos y ahorra sí o sí cada mes. Simple, claro y en tu bolsillo.</p>
+      <div class="w-chart">${bars.map((h, i) => `<i style="--h:${h};animation-delay:${(.15 + i * .08).toFixed(2)}s"></i>`).join('')}</div>
+      <div class="w-feats">${feats.map((f, i) => `
+        <div class="w-feat" style="animation-delay:${(.3 + i * .12).toFixed(2)}s"><div class="fi">${f[0]}</div>
+          <div class="ft"><b>${f[1]}</b>${f[2]}</div></div>`).join('')}</div>
+      <div class="w-actions">
+        ${hasGoogle ? `<button class="gbtn" data-action="enter-google">${G} Continuar con Google</button>
+          <button class="btn ghost block" data-action="enter-local">Empezar sin cuenta</button>
+          <p class="w-note">Con Google <b>sincronizas</b> entre tu celular y PC.<br>Sin cuenta, tus datos quedan <b>solo en este dispositivo</b>.</p>`
+        : `<button class="btn primary block" data-action="enter-local">Empezar ahora</button>
+          <p class="w-note">Tus datos quedan <b>solo en este dispositivo</b>, privados.</p>`}
+      </div>
+    </div></div>`;
+  }
+  function hookWelcome() {
+    if (window.__welcomeHooked) return; window.__welcomeHooked = true;
+    if (window.matchMedia && matchMedia('(pointer:coarse)').matches) return;
+    window.addEventListener('pointermove', e => {
+      const bg = document.querySelector('.w-bg'); if (!bg) return;
+      const x = (e.clientX / window.innerWidth - .5) * 22, y = (e.clientY / window.innerHeight - .5) * 22;
+      bg.style.transform = `translate(${x}px,${y}px)`;
+    });
+  }
+
   /* ---------- utilidades ---------- */
   function emptyState(em, title, desc, btn, action) {
     return `<div class="empty"><div class="em">${em}</div><h3>${title}</h3><p>${desc}</p>
@@ -645,7 +686,7 @@ const UI = (() => {
     inicio, ingresos, gastos, mercado, stats, sobres,
     incomeForm, fixedForm, marketForm, variableForm, savingForm,
     envelopeForm, envelopeDetail, envItemForm, budgetForm,
-    alertsSheet, settingsSheet, onboarding,
+    alertsSheet, settingsSheet, onboarding, welcome, hookWelcome,
     openSheet, closeSheet, toast,
     get gastosTab() { return gastosTab; }, set gastosTab(v) { gastosTab = v; },
     get marketFilter() { return marketFilter; }, set marketFilter(v) { marketFilter = v; },
