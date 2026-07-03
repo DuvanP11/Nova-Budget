@@ -62,6 +62,14 @@ const Store = (() => {
     const [y, m] = period.split('-').map(Number);
     return new Date(y, m - 1, 1).toLocaleDateString(state.settings.locale, { month: 'long', year: 'numeric' });
   };
+  const shiftPeriod = (period, delta) => { const [y, m] = period.split('-').map(Number); const d = new Date(y, m - 1 + delta, 1); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; };
+  const prevPeriod = (period) => shiftPeriod(period, -1);
+  // ¿un elemento recurrente (fijo/ingreso) está vigente en este periodo? (rango since..until, inclusivo)
+  function withinRange(item, period) {
+    if (item.since && period < item.since) return false;   // aún no empezaba
+    if (item.until && period > item.until) return false;   // ya no existe desde ese mes
+    return true;
+  }
 
   /* ---------- formato de dinero ---------- */
   function money(v) {
@@ -82,9 +90,20 @@ const Store = (() => {
     return it;
   }
   function remove(coll, id) { state[coll] = state[coll].filter(x => x.id !== id); save(); }
+  // Da de baja un recurrente desde `period` (inclusive) sin borrar los meses anteriores.
+  function endRecurring(coll, id, period = monthKey()) {
+    const it = state[coll].find(x => x.id === id);
+    if (!it) return null;
+    it.until = prevPeriod(period);            // deja de contar desde `period` en adelante
+    // si nunca llegó a aplicar (se creó este mismo mes o después), mejor borrarlo del todo
+    if (it.since && it.until < it.since) { state[coll] = state[coll].filter(x => x.id !== id); }
+    save();
+    return it;
+  }
 
   /* ---------- ¿un gasto fijo aplica en un periodo? ---------- */
   function fixedDueInPeriod(f, period = monthKey()) {
+    if (!withinRange(f, period)) return false;   // vigencia por mes (se dio de baja / aún no empezaba)
     const every = f.everyMonths || 1;
     if (every === 1) return true;
     const anchor = f.anchor || period;
@@ -120,14 +139,22 @@ const Store = (() => {
   const marketOf = (period = monthKey()) => state.market.filter(m => inMonth(m.date, period));
   const variableOf = (period = monthKey()) => state.variable.filter(v => inMonth(v.date, period));
 
+  /* ---------- ¿un ingreso está activo en este periodo? ---------- */
+  const incomeActiveIn = (i, period = monthKey()) => i.active !== false && withinRange(i, period);
+
   /* ---------- resumen del mes ---------- */
   function summary(period = monthKey()) {
-    const income = state.incomes.filter(i => i.active !== false).reduce((s, i) => s + Number(i.amount || 0), 0);
+    const income = state.incomes.filter(i => incomeActiveIn(i, period)).reduce((s, i) => s + Number(i.amount || 0), 0);
     const fixedList = state.fixed.filter(f => fixedDueInPeriod(f, period));
     const fixedTotal = fixedList.reduce((s, f) => s + Number(f.amount || 0), 0);
+    // Mercado fijo = presupuesto mensual de mercado; las compras reales lo consumen (no se suman aparte)
+    const marketPlanned = fixedList.filter(f => f.category === 'mercado').reduce((s, f) => s + Number(f.amount || 0), 0);
     const marketTotal = marketOf(period).reduce((s, m) => s + Number(m.amount || 0), 0);
     const variableTotal = variableOf(period).reduce((s, v) => s + Number(v.amount || 0), 0);
-    const spent = fixedTotal + marketTotal + variableTotal;
+    const marketOver = Math.max(0, marketTotal - marketPlanned);   // solo lo que se pasa del presupuesto suma extra
+    const marketLeft = marketPlanned - marketTotal;                // + queda, − se pasó
+    // el mercado real solo aporta al gasto lo que exceda el presupuesto fijo de mercado
+    const spent = fixedTotal + marketOver + variableTotal;
 
     const savingsTarget = state.settings.savingsMode === 'percent'
       ? Math.round(income * (Number(state.settings.savingsValue) || 0) / 100)
@@ -141,6 +168,7 @@ const Store = (() => {
 
     return {
       period, income, fixedTotal, marketTotal, variableTotal, spent,
+      marketPlanned, marketOver, marketLeft,
       savingsTarget, saved, savingsGap: Math.max(0, savingsTarget - saved),
       available, freeNoSave, savingsRate, spendRate,
       fixedCount: fixedList.length,
@@ -208,9 +236,11 @@ const Store = (() => {
   }
   function spendBreakdown(period = monthKey()) {
     const s = summary(period);
+    // el mercado agrupa presupuesto fijo + compras reales (lo mayor); "Fijos" excluye el mercado fijo para no duplicar
+    const grocery = Math.max(s.marketPlanned, s.marketTotal);
     const parts = [
-      { key: 'fijos', name: 'Fijos', color: '#0f9d76', value: s.fixedTotal },
-      { key: 'mercado', name: 'Mercado', color: '#ff8a3d', value: s.marketTotal },
+      { key: 'fijos', name: 'Fijos', color: '#0f9d76', value: s.fixedTotal - s.marketPlanned },
+      { key: 'mercado', name: 'Mercado', color: '#ff8a3d', value: grocery },
       { key: 'variable', name: 'Variables', color: '#3b82f6', value: s.variableTotal },
     ].filter(p => p.value > 0);
     return parts;
@@ -323,8 +353,8 @@ const Store = (() => {
   function removeBudget(key) { delete state.budgets[key]; save(); }
 
   /* ---------- ingresos: bruto / deducciones / neto ---------- */
-  function incomeBreakdown() {
-    const act = state.incomes.filter(i => i.active !== false);
+  function incomeBreakdown(period = monthKey()) {
+    const act = state.incomes.filter(i => incomeActiveIn(i, period));
     const bruto = act.filter(i => Number(i.amount) > 0).reduce((s, i) => s + Number(i.amount || 0), 0);
     const deducciones = act.filter(i => Number(i.amount) < 0).reduce((s, i) => s + Number(i.amount || 0), 0); // negativo
     return { bruto, deducciones, neto: bruto + deducciones };
@@ -452,8 +482,8 @@ const Store = (() => {
   return {
     get state() { return state; },
     get settings() { return state.settings; },
-    save, add, update, remove,
-    money, uid, monthKey, dayKey, monthName, monthIndexAbs,
+    save, add, update, remove, endRecurring,
+    money, uid, monthKey, dayKey, monthName, monthIndexAbs, shiftPeriod, prevPeriod,
     summary, health, upcoming, alerts, projection, trend,
     marketByCategory, spendBreakdown, fixedDueInPeriod, nextDueDate,
     isPaid, togglePaid, marketOf, variableOf, daysBetween,

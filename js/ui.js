@@ -5,6 +5,12 @@ const UI = (() => {
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   let editing = null;
 
+  /* ---------- mes que se está viendo (navegación de meses) ---------- */
+  let period = Store.monthKey();
+  const isCurrentPeriod = () => period === Store.monthKey();
+  // fecha por defecto al registrar en un mes que no es el actual (día 15 de ese mes)
+  const defaultDate = () => isCurrentPeriod() ? Store.dayKey() : period + '-15';
+
   /* ---------- toast ---------- */
   let toastT;
   function toast(msg) {
@@ -28,16 +34,21 @@ const UI = (() => {
      VISTA: INICIO (dashboard)
      ========================================================= */
   function inicio() {
-    const s = Store.summary();
-    const h = Store.health();
-    const up = Store.upcoming().filter(u => !u.paid).slice(0, 4);
-    const breakdown = Store.spendBreakdown();
-    const alerts = Store.alerts();
+    const cur = isCurrentPeriod();
+    const s = Store.summary(period);
+    const h = Store.health(period);
+    const up = cur ? Store.upcoming().filter(u => !u.paid).slice(0, 4) : [];
+    const breakdown = Store.spendBreakdown(period);
+    const alerts = cur ? Store.alerts() : [];
 
     const availClass = s.available >= 0 ? '' : 'neg';
     const savePct = s.savingsTarget > 0 ? Math.min(100, Math.round(s.saved / s.savingsTarget * 100)) : 0;
 
     return `
+    ${!cur ? `<div class="card" style="border-color:var(--blue);background:rgba(90,162,255,.10);margin-bottom:14px">
+        <div class="spread"><div class="card-title" style="text-transform:capitalize">🗓️ ${Store.monthName(period)}</div>
+          <button class="linkbtn" data-action="month-today">Volver a hoy</button></div>
+      </div>` : ''}
     ${alerts.length ? `<div class="card" style="border-color:var(--accent);background:var(--accent-t);margin-bottom:14px" data-action="open-alerts">
         <div class="spread"><div class="card-title">🔔 Tienes ${alerts.length} alerta${alerts.length > 1 ? 's' : ''}</div><span class="linkbtn">Ver</span></div>
       </div>` : ''}
@@ -56,7 +67,7 @@ const UI = (() => {
       <div class="tile"><div class="k">Libre real</div><div class="v ${availClass}">${money(s.freeNoSave)}</div></div>
     </div>
 
-    ${(() => { const ins = Store.insights(); return ins.length ? `<div class="section-title">Resumen inteligente</div>
+    ${(() => { const ins = cur ? Store.insights() : []; return ins.length ? `<div class="section-title">Resumen inteligente</div>
       <div class="list">${ins.map(i => `<div class="li"><div class="ic">${i.e}</div>
         <div class="mid"><div class="s" style="white-space:normal;color:var(--ink-dim);font-size:13.5px;line-height:1.45">${esc(i.t)}</div></div></div>`).join('')}</div>` : ''; })()}
 
@@ -80,10 +91,10 @@ const UI = (() => {
       </div>
     </div>
 
-    <div class="section-title">Próximos pagos</div>
+    ${cur ? `<div class="section-title">Próximos pagos</div>
     ${up.length ? `<div class="list">${up.map(pagoLI).join('')}</div>
       <button class="btn ghost block mt16" data-route="gastos">Ver todos los gastos fijos</button>`
-      : emptyState('🗓️', 'Sin pagos próximos', 'Agrega tus gastos fijos (arriendo, servicios) para programar tus pagos.', 'Agregar gasto fijo', 'add-fixed')}
+      : emptyState('🗓️', 'Sin pagos próximos', 'Agrega tus gastos fijos (arriendo, servicios) para programar tus pagos.', 'Agregar gasto fijo', 'add-fixed')}` : ''}
 
     ${breakdown.length ? `<div class="section-title">¿En qué se va la plata?</div>
       <div class="card" data-route="stats" style="cursor:pointer">
@@ -122,7 +133,7 @@ const UI = (() => {
      ========================================================= */
   function ingresos() {
     const list = Store.state.incomes;
-    const b = Store.incomeBreakdown();
+    const b = Store.incomeBreakdown(period);
     return `
     <div class="hero">
       <div class="label">Ingreso neto mensual</div>
@@ -136,11 +147,14 @@ const UI = (() => {
     <div class="section-title">Tus movimientos</div>
     ${list.length ? `<div class="list">${list.map(i => {
       const neg = Number(i.amount) < 0;
-      return `<div class="li" data-action="edit-income" data-id="${i.id}">
-        <div class="ic" style="background:${neg ? 'var(--red-t)' : 'var(--green-t)'}">${neg ? '➖' : i.type === 'fijo' ? '💵' : '📈'}</div>
-        <div class="mid"><div class="t">${esc(i.name)}</div>
-          <div class="s">${neg ? 'Deducción' : (i.type === 'fijo' ? 'Fijo' : 'Variable')}${i.day ? ' · día ' + i.day : ''}${i.active === false ? ' · inactivo' : ''}</div></div>
+      const off = i.until && period > i.until;   // ya dado de baja en el mes que se ve
+      return `<div class="li" style="${off ? 'opacity:.5' : ''}">
+        <div class="ic" data-action="edit-income" data-id="${i.id}" style="background:${neg ? 'var(--red-t)' : 'var(--green-t)'}">${neg ? '➖' : i.type === 'fijo' ? '💵' : '📈'}</div>
+        <div class="mid" data-action="edit-income" data-id="${i.id}"><div class="t">${esc(i.name)}</div>
+          <div class="s">${neg ? 'Deducción' : (i.type === 'fijo' ? 'Fijo' : 'Variable')}${i.day ? ' · día ' + i.day : ''}${i.active === false ? ' · inactivo' : ''}${rangeNote(i)}</div></div>
         <div class="amt" style="${neg ? 'color:var(--red)' : ''}">${money(i.amount)}</div>
+        <button class="mini" data-action="edit-income" data-id="${i.id}" title="Editar">✏️</button>
+        <button class="mini" data-action="del-recurring" data-coll="incomes" data-id="${i.id}" title="Eliminar">🗑</button>
       </div>`;
     }).join('')}</div>`
       : emptyState('💵', 'Sin ingresos aún', 'Agrega tu sueldo u otras fuentes para saber cuánto puedes gastar y ahorrar.', 'Agregar ingreso', 'add-income')}
@@ -161,15 +175,15 @@ const UI = (() => {
   }
 
   function gastosFijos() {
-    const s = Store.summary();
-    const upMap = {}; Store.upcoming().forEach(u => upMap[u.ref.id] = u);
+    const s = Store.summary(period);
+    const upMap = {}; if (isCurrentPeriod()) Store.upcoming().forEach(u => upMap[u.ref.id] = u);
     const known = Store.FIXED_CATS.map(c => c.key);
     let body = '';
     Store.FIXED_CATS.forEach(g => {
       let items = Store.state.fixed.filter(f => f.category === g.key);
       if (g.key === 'otros') items = items.concat(Store.state.fixed.filter(f => !known.includes(f.category)));
       if (!items.length) return;
-      const sub = items.reduce((a, f) => a + (Store.fixedDueInPeriod(f) ? Number(f.amount || 0) : 0), 0);
+      const sub = items.reduce((a, f) => a + (Store.fixedDueInPeriod(f, period) ? Number(f.amount || 0) : 0), 0);
       body += `<div class="section-title">${g.emoji} ${g.name} · <span class="muted">${money(sub)}/mes</span></div>`;
       body += `<div class="list">${items.map(f => fixedCard(f, upMap[f.id])).join('')}</div>`;
     });
@@ -183,27 +197,30 @@ const UI = (() => {
   }
 
   function fixedCard(f, u) {
-    const due = Store.fixedDueInPeriod(f);
-    const paid = u && u.paid;
+    const due = Store.fixedDueInPeriod(f, period);
+    const paid = due && Store.isPaid(f.id, period);
     const freq = f.everyMonths === 2 ? 'cada 2 meses' : f.everyMonths === 3 ? 'cada 3 meses' : 'mensual';
+    const off = f.until && period > f.until;
     let pill = '';
-    if (!due) pill = `<span class="pill ok">este mes no aplica</span>`;
+    if (off) pill = `<span class="pill ok">baja ${shortMonth(f.until)}</span>`;
+    else if (!due) pill = `<span class="pill ok">este mes no aplica</span>`;
     else if (paid) pill = `<span class="pill paid">✓ pagado</span>`;
     else if (u && u.overdue) pill = `<span class="pill due">vencido</span>`;
     else if (u && u.days <= (Store.settings.alertDays || 3)) pill = `<span class="pill soon">${u.days === 0 ? 'hoy' : u.days === 1 ? 'mañana' : u.days + ' días'}</span>`;
-    return `<div class="li">
+    return `<div class="li" style="${off ? 'opacity:.5' : ''}">
       <div class="ic" data-action="edit-fixed" data-id="${f.id}">${fEmoji(f)}</div>
       <div class="mid" data-action="edit-fixed" data-id="${f.id}">
         <div class="t">${esc(f.name)}</div>
         <div class="s">día ${f.dueDay} · ${freq} ${pill}</div>
       </div>
       <div class="amt">${money(f.amount)}</div>
-      ${due ? `<button class="mini" data-action="paid" data-id="${f.id}" data-period="${u ? u.period : Store.monthKey()}" title="Pagado">${paid ? '↩' : '✓'}</button>` : ''}
+      ${due ? `<button class="mini" data-action="paid" data-id="${f.id}" data-period="${period}" title="Pagado">${paid ? '↩' : '✓'}</button>` : ''}
+      <button class="mini" data-action="del-recurring" data-coll="fixed" data-id="${f.id}" title="Eliminar">🗑</button>
     </div>`;
   }
 
   function gastosVariables() {
-    const list = Store.variableOf();
+    const list = Store.variableOf(period);
     const total = list.reduce((a, v) => a + Number(v.amount || 0), 0);
     const cats = {};
     list.forEach(v => cats[v.category] = (cats[v.category] || 0) + Number(v.amount || 0));
@@ -220,10 +237,11 @@ const UI = (() => {
     ${list.length ? `<div class="list">${list.map(v => {
       const c = Store.VAR_CATS.find(x => x.key === v.category) || { emoji: '💳', name: v.category, color: 'var(--muted)' };
       return `<div class="li">
-        <div class="ic" style="background:${c.color}22">${c.emoji}</div>
-        <div class="mid"><div class="t">${esc(v.description || c.name)}</div><div class="s">${c.name} · ${fdate(v.date)}</div></div>
+        <div class="ic" data-action="edit-variable" data-id="${v.id}" style="background:${c.color}22">${c.emoji}</div>
+        <div class="mid" data-action="edit-variable" data-id="${v.id}"><div class="t">${esc(v.description || c.name)}</div><div class="s">${c.name} · ${fdate(v.date)}</div></div>
         <div class="amt">${money(v.amount)}</div>
-        <button class="mini" data-action="del" data-coll="variable" data-id="${v.id}">🗑</button>
+        <button class="mini" data-action="edit-variable" data-id="${v.id}" title="Editar">✏️</button>
+        <button class="mini" data-action="del" data-coll="variable" data-id="${v.id}" title="Eliminar">🗑</button>
       </div>`;
     }).join('')}</div>`
       : emptyState('💳', 'Sin gastos variables', 'Registra ocio, transporte, salud, imprevistos… y ve en qué se te va la plata.', 'Agregar gasto', 'add-variable')}
@@ -233,20 +251,44 @@ const UI = (() => {
   /* =========================================================
      VISTA: MERCADO
      ========================================================= */
+  // Tarjeta que liga el mercado real con el gasto fijo "Mercado fijo" (presupuesto)
+  function mercadoFijoCard(s) {
+    const pctUsed = s.marketPlanned > 0 ? Math.min(100, Math.round(s.marketTotal / s.marketPlanned * 100)) : 0;
+    const over = s.marketLeft < 0;
+    const col = over ? 'var(--red)' : pctUsed >= 90 ? 'var(--accent)' : 'var(--green)';
+    return `<div class="card mt16">
+      <div class="spread mb8"><div class="card-title">🛒 Presupuesto de mercado</div>
+        <button class="linkbtn" data-action="edit-fixed-market">Ajustar</button></div>
+      <div class="grid3" style="margin-bottom:4px">
+        <div class="tile center"><div class="k">Presupuesto</div><div class="v">${Charts.shorten(s.marketPlanned)}</div></div>
+        <div class="tile center"><div class="k">Llevas</div><div class="v" style="color:var(--accent)">${Charts.shorten(s.marketTotal)}</div></div>
+        <div class="tile center"><div class="k">${over ? 'Te pasaste' : 'Te queda'}</div><div class="v" style="color:${col}">${Charts.shorten(Math.abs(s.marketLeft))}</div></div>
+      </div>
+      <div class="progresswrap"><div class="progressfill" style="width:${pctUsed}%;background:${col}"></div></div>
+      <div class="small muted mt8" style="line-height:1.45">${over
+        ? `Ya superaste tu presupuesto; el exceso (${money(-s.marketLeft)}) se suma a los gastos del mes.`
+        : `Estas compras se descuentan del presupuesto fijo; solo lo que exceda suma de más.`}</div>
+    </div>`;
+  }
+
   let marketFilter = 'all';
   function mercado() {
-    const list = Store.marketOf().filter(m => marketFilter === 'all' || m.category === marketFilter);
-    const all = Store.marketOf();
+    const list = Store.marketOf(period).filter(m => marketFilter === 'all' || m.category === marketFilter);
+    const all = Store.marketOf(period);
     const total = all.reduce((a, m) => a + Number(m.amount || 0), 0);
-    const byCat = Store.marketByCategory();
+    const byCat = Store.marketByCategory(period);
+    const s = Store.summary(period);
     return `
     <div class="hero" style="background:linear-gradient(135deg,#ff8a3d,#e5622a)">
-      <div class="label">Mercado · este mes</div>
+      <div class="label">Mercado · ${isCurrentPeriod() ? 'este mes' : shortMonth(period)}</div>
       <div class="amount">${money(total)}</div>
       <div class="sub">${all.length} compra${all.length !== 1 ? 's' : ''} registrada${all.length !== 1 ? 's' : ''}</div>
     </div>
 
-    ${(() => { const mb = Store.budgetsList().filter(b => b.key.startsWith('market:')); return mb.length ? `<div class="section-title">Presupuesto de mercado</div><div class="list">${mb.map(budgetMeter).join('')}</div>` : ''; })()}
+    ${s.marketPlanned > 0 ? mercadoFijoCard(s) : `<div class="card mt16" style="border-style:dashed">
+      <div class="small muted" style="line-height:1.5">💡 Define un <b>gasto fijo de "Mercado fijo"</b> como tu presupuesto mensual y estas compras se descuentan de él (así el mercado no se suma de más).</div>
+      <button class="btn soft block sm mt8" data-action="add-fixed-market">＋ Poner presupuesto de mercado</button>
+    </div>`}
 
     ${byCat.length ? `<div class="section-title">Por tipo de producto</div>
     <div class="card"><div class="row" style="align-items:center">
@@ -263,10 +305,11 @@ const UI = (() => {
       const c = Store.MARKET_CATS.find(x => x.key === m.category) || { emoji: '🛒', name: m.category, color: 'var(--muted)' };
       const qty = m.qty ? `${(+m.qty % 1 ? +m.qty : Math.round(m.qty))}${m.unit ? ' ' + esc(m.unit) : ''} · ` : '';
       return `<div class="li">
-        <div class="ic" style="background:${c.color}22">${c.emoji}</div>
-        <div class="mid"><div class="t">${esc(m.item || c.name)}</div><div class="s">${qty}${c.name} · ${fdate(m.date)}</div></div>
+        <div class="ic" data-action="edit-market" data-id="${m.id}" style="background:${c.color}22">${c.emoji}</div>
+        <div class="mid" data-action="edit-market" data-id="${m.id}"><div class="t">${esc(m.item || c.name)}</div><div class="s">${qty}${c.name} · ${fdate(m.date)}</div></div>
         <div class="amt">${money(m.amount)}</div>
-        <button class="mini" data-action="del" data-coll="market" data-id="${m.id}">🗑</button>
+        <button class="mini" data-action="edit-market" data-id="${m.id}" title="Editar">✏️</button>
+        <button class="mini" data-action="del" data-coll="market" data-id="${m.id}" title="Eliminar">🗑</button>
       </div>`;
     }).join('')}</div>`
       : emptyState('🛒', 'Sin compras registradas', 'Agrega tus compras del mercado por tipo: verduras, frutas, lácteos, granos, carnes…', 'Agregar compra', 'add-market')}
@@ -277,11 +320,11 @@ const UI = (() => {
      VISTA: STATS + PROYECCIÓN
      ========================================================= */
   function stats() {
-    const s = Store.summary();
-    const bd = Store.spendBreakdown();
+    const s = Store.summary(period);
+    const bd = Store.spendBreakdown(period);
     const tr = Store.trend(6);
     const proj = Store.projection(12);
-    const market = Store.marketByCategory();
+    const market = Store.marketByCategory(period);
     return `
     ${budgetsBlock()}
     <div class="section-title">Gasto por área · ${Store.monthName(s.period)}</div>
@@ -436,7 +479,7 @@ const UI = (() => {
     </div>`;
   }
   function budgetsBlock() {
-    const list = Store.budgetsList();
+    const list = Store.budgetsList(period);
     return `<div class="section-title">Presupuestos del mes</div>
     ${list.length ? `<div class="list">${list.map(budgetMeter).join('')}</div>`
       : `<div class="card muted small center">Sin topes aún. Ponle un límite a una categoría (ej. mercado) y te aviso al ${Store.settings.budgetAlertPct}%.</div>`}
@@ -495,15 +538,16 @@ const UI = (() => {
         <button type="button" class="btn ghost block" data-action="close">Cancelar</button>
         <button type="submit" class="btn primary block">Guardar</button>
       </div>
-      ${it ? `<button type="button" class="btn danger block mt8" data-action="del-close" data-coll="incomes" data-id="${it.id}">Eliminar</button>` : ''}
+      ${it ? `<button type="button" class="btn danger block mt8" data-action="del-recurring" data-coll="incomes" data-id="${it.id}">Eliminar</button>` : ''}
     </form>`);
   }
 
   function fixedForm(it) {
-    editing = it || null;
-    openSheet(`<h2>${it ? 'Editar' : 'Nuevo'} gasto fijo</h2><p class="muted">Arriendo, servicios o cualquier pago recurrente.</p>
+    const ed = !!(it && it.id);   // editando un gasto existente (vs. nuevo con valores por defecto)
+    editing = ed ? it : null;
+    openSheet(`<h2>${ed ? 'Editar' : 'Nuevo'} gasto fijo</h2><p class="muted">Arriendo, servicios o cualquier pago recurrente.</p>
     <form data-form="fixed">
-      <input type="hidden" name="id" value="${it ? it.id : ''}">
+      <input type="hidden" name="id" value="${ed ? it.id : ''}">
       ${txt('name', 'Nombre', it ? it.name : '', 'Arriendo, Luz + aseo, Gas, Agua…')}
       ${num('amount', 'Valor', it ? it.amount : '')}
       <div class="field"><label>Categoría</label><select name="category">${Store.FIXED_CATS.map(c => `<option value="${c.key}" ${it && it.category === c.key ? 'selected' : ''}>${c.emoji} ${c.name}</option>`).join('')}</select></div>
@@ -514,44 +558,78 @@ const UI = (() => {
         <button type="button" class="btn ghost block" data-action="close">Cancelar</button>
         <button type="submit" class="btn primary block">Guardar</button>
       </div>
-      ${it ? `<button type="button" class="btn danger block mt8" data-action="del-close" data-coll="fixed" data-id="${it.id}">Eliminar</button>` : ''}
+      ${ed ? `<button type="button" class="btn danger block mt8" data-action="del-recurring" data-coll="fixed" data-id="${it.id}">Eliminar</button>` : ''}
     </form>`);
   }
 
-  function marketForm() {
-    openSheet(`<h2>Compra de mercado</h2><p class="muted">Registra por tipo de producto.</p>
+  // Abre el gasto fijo de "Mercado fijo" (el presupuesto de mercado): edita el que exista o crea uno nuevo
+  function mercadoFijoForm() {
+    const it = Store.state.fixed.find(f => f.category === 'mercado' && !(f.until && period > f.until));
+    fixedForm(it || { name: 'Mercado fijo', category: 'mercado', everyMonths: 1, dueDay: 1 });
+  }
+
+  // Hoja de confirmación para dar de baja / borrar un recurrente (fijo o ingreso)
+  function deleteRecurringSheet(coll, id) {
+    const it = Store.state[coll].find(x => x.id === id);
+    if (!it) return;
+    const kind = coll === 'incomes' ? 'ingreso' : 'gasto fijo';
+    openSheet(`<h2>Eliminar ${kind}</h2>
+    <p class="muted">"${esc(it.name)}" · ${money(it.amount)}</p>
+    <div class="list" style="margin-top:4px">
+      <button class="li" style="width:100%;text-align:left;cursor:pointer" data-action="del-from-month" data-coll="${coll}" data-id="${id}">
+        <div class="ic" style="background:var(--accent-t)">🗓️</div>
+        <div class="mid"><div class="t">Quitar desde ${shortMonth(period)}</div>
+          <div class="s" style="white-space:normal">Deja de contar de aquí en adelante. Los meses anteriores lo conservan.</div></div>
+      </button>
+      <button class="li" style="width:100%;text-align:left;cursor:pointer" data-action="del-forever" data-coll="${coll}" data-id="${id}">
+        <div class="ic" style="background:var(--red-t)">🗑</div>
+        <div class="mid"><div class="t" style="color:var(--red)">Borrar de todos los meses</div>
+          <div class="s" style="white-space:normal">Lo elimina por completo, también del historial.</div></div>
+      </button>
+    </div>
+    <button class="btn ghost block mt16" data-action="close">Cancelar</button>`);
+  }
+
+  function marketForm(it) {
+    editing = it || null;
+    openSheet(`<h2>${it ? 'Editar' : 'Nueva'} compra de mercado</h2><p class="muted">Registra por tipo de producto.</p>
     <form data-form="market">
-      <div class="field"><label>Tipo de producto</label><select name="category">${Store.MARKET_CATS.map(c => `<option value="${c.key}">${c.emoji} ${c.name}</option>`).join('')}</select></div>
-      ${txt('item', 'Insumo', '', 'Pollo entero, arroz, brócoli…')}
+      <input type="hidden" name="id" value="${it ? it.id : ''}">
+      <div class="field"><label>Tipo de producto</label><select name="category">${Store.MARKET_CATS.map(c => `<option value="${c.key}" ${it && it.category === c.key ? 'selected' : ''}>${c.emoji} ${c.name}</option>`).join('')}</select></div>
+      ${txt('item', 'Insumo', it ? it.item : '', 'Pollo entero, arroz, brócoli…')}
       <div class="row">
-        <div style="flex:1">${num('qty', 'Cantidad', '')}</div>
-        <div style="flex:1">${txt('unit', 'Unidad', '', 'g, kg, und, lb…')}</div>
+        <div style="flex:1">${num('qty', 'Cantidad', it ? it.qty : '')}</div>
+        <div style="flex:1">${txt('unit', 'Unidad', it ? it.unit : '', 'g, kg, und, lb…')}</div>
       </div>
-      ${num('amount', 'Valor', '')}
-      <div class="field"><label>Fecha</label><input name="date" type="date" value="${Store.dayKey()}"></div>
+      ${num('amount', 'Valor', it ? it.amount : '')}
+      <div class="field"><label>Fecha</label><input name="date" type="date" value="${it ? it.date : defaultDate()}"></div>
       <div class="form-actions">
         <button type="button" class="btn ghost block" data-action="close">Cancelar</button>
         <button type="submit" class="btn primary block">Guardar</button>
       </div>
+      ${it ? `<button type="button" class="btn danger block mt8" data-action="del-close" data-coll="market" data-id="${it.id}">Eliminar</button>` : ''}
     </form>`);
   }
 
-  function variableForm() {
-    openSheet(`<h2>Gasto variable</h2><p class="muted">Ocio, transporte, salud, imprevistos…</p>
+  function variableForm(it) {
+    editing = it || null;
+    openSheet(`<h2>${it ? 'Editar' : 'Nuevo'} gasto variable</h2><p class="muted">Ocio, transporte, salud, imprevistos…</p>
     <form data-form="variable">
-      <div class="field"><label>Categoría</label><select name="category">${Store.VAR_CATS.map(c => `<option value="${c.key}">${c.emoji} ${c.name}</option>`).join('')}</select></div>
-      ${txt('description', 'Descripción (opcional)', '', 'Bus, cine, medicina…')}
-      ${num('amount', 'Valor', '')}
-      <div class="field"><label>Fecha</label><input name="date" type="date" value="${Store.dayKey()}"></div>
+      <input type="hidden" name="id" value="${it ? it.id : ''}">
+      <div class="field"><label>Categoría</label><select name="category">${Store.VAR_CATS.map(c => `<option value="${c.key}" ${it && it.category === c.key ? 'selected' : ''}>${c.emoji} ${c.name}</option>`).join('')}</select></div>
+      ${txt('description', 'Descripción (opcional)', it ? it.description : '', 'Bus, cine, medicina…')}
+      ${num('amount', 'Valor', it ? it.amount : '')}
+      <div class="field"><label>Fecha</label><input name="date" type="date" value="${it ? it.date : defaultDate()}"></div>
       <div class="form-actions">
         <button type="button" class="btn ghost block" data-action="close">Cancelar</button>
         <button type="submit" class="btn primary block">Guardar</button>
       </div>
+      ${it ? `<button type="button" class="btn danger block mt8" data-action="del-close" data-coll="variable" data-id="${it.id}">Eliminar</button>` : ''}
     </form>`);
   }
 
   function savingForm() {
-    const s = Store.summary();
+    const s = Store.summary(period);
     openSheet(`<h2>Apartar ahorro</h2><p class="muted">Meta del mes: ${money(s.savingsTarget)} · llevas ${money(s.saved)}.</p>
     <form data-form="saving">
       ${num('amount', '¿Cuánto vas a apartar ahora?', s.savingsGap || '')}
@@ -681,15 +759,20 @@ const UI = (() => {
   }
   const pct = (v, t) => t > 0 ? Math.round(v / t * 100) : 0;
   function fdate(d) { try { return new Date(d + 'T00:00').toLocaleDateString(Store.settings.locale, { day: 'numeric', month: 'short' }); } catch { return d; } }
+  function shortMonth(p) { try { const [y, m] = p.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleDateString(Store.settings.locale, { month: 'short', year: '2-digit' }); } catch { return p; } }
+  // nota de vigencia: se muestra "baja <mes>" cuando el recurrente fue dado de baja
+  function rangeNote(it) { return it.until ? ` · baja ${shortMonth(it.until)}` : ''; }
 
   return {
     inicio, ingresos, gastos, mercado, stats, sobres,
-    incomeForm, fixedForm, marketForm, variableForm, savingForm,
+    incomeForm, fixedForm, marketForm, variableForm, savingForm, mercadoFijoForm, deleteRecurringSheet,
     envelopeForm, envelopeDetail, envItemForm, budgetForm,
     alertsSheet, settingsSheet, onboarding, welcome, hookWelcome,
     openSheet, closeSheet, toast,
     get gastosTab() { return gastosTab; }, set gastosTab(v) { gastosTab = v; },
     get marketFilter() { return marketFilter; }, set marketFilter(v) { marketFilter = v; },
+    get period() { return period; }, set period(v) { period = v; },
+    isCurrentPeriod,
     get editing() { return editing; },
   };
 })();

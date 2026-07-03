@@ -41,6 +41,9 @@ const Cloud = (() => {
 
   async function init() {
     if (!enabled()) return;
+    // Restaura la sesión desde prefs SIN abrir Google (evita el selector de cuenta al arrancar).
+    const pref = loadPref();
+    if (pref.connected && pref.email) { email = pref.email; subscribe(); emit(); }
     try { await waitGIS(); } catch { return; }
     tokenClient = google.accounts.oauth2.initTokenClient({
       client_id: CLIENT_ID, scope: SCOPES,
@@ -57,7 +60,7 @@ const Cloud = (() => {
       },
     });
     ready = true;
-    if (loadPref().connected) { connect(false).catch(() => {}); } // reintento silencioso
+    if (pref.connected) { syncNow().catch(() => {}); } // sync silencioso al arrancar (no abre popup)
   }
 
   function getToken(interactive) {
@@ -65,7 +68,8 @@ const Cloud = (() => {
       if (!tokenClient) return reject(new Error('Google no cargó'));
       if (accessToken && Date.now() < tokenExp - 60000) return resolve(accessToken);
       pending = { resolve, reject };
-      try { tokenClient.requestAccessToken({ prompt: interactive ? 'consent' : '' }); }
+      // interactive => permite mostrar UI; de fondo => 'none' (nunca muestra el selector, falla en silencio)
+      try { tokenClient.requestAccessToken({ prompt: interactive ? 'consent' : 'none' }); }
       catch (e) { pending = null; reject(e); }
     });
   }

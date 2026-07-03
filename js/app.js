@@ -20,7 +20,9 @@
   function go(r) { route = r; render(); }
 
   function updateChrome() {
-    $('#brandMonth').textContent = Store.monthName(Store.monthKey());
+    $('#brandMonth').textContent = Store.monthName(UI.period);
+    const nav = $('#monthNav');
+    if (nav) nav.classList.toggle('off-month', !UI.isCurrentPeriod());
     const n = Store.alerts().length;
     const badge = $('#bellBadge');
     badge.hidden = n === 0; badge.textContent = n;
@@ -47,6 +49,14 @@
     'add-saving': () => UI.savingForm(),
     'edit-income': el => UI.incomeForm(Store.state.incomes.find(x => x.id === el.dataset.id)),
     'edit-fixed': el => UI.fixedForm(Store.state.fixed.find(x => x.id === el.dataset.id)),
+    'edit-variable': el => UI.variableForm(Store.state.variable.find(x => x.id === el.dataset.id)),
+    'edit-market': el => UI.marketForm(Store.state.market.find(x => x.id === el.dataset.id)),
+    'add-fixed-market': () => UI.mercadoFijoForm(),
+    'edit-fixed-market': () => UI.mercadoFijoForm(),
+    'month-today': () => { UI.period = Store.monthKey(); render(); },
+    'del-recurring': el => UI.deleteRecurringSheet(el.dataset.coll, el.dataset.id),
+    'del-from-month': el => { Store.endRecurring(el.dataset.coll, el.dataset.id, UI.period); UI.closeSheet(); render(); UI.toast('Quitado desde ' + Store.monthName(UI.period)); },
+    'del-forever': el => { Store.remove(el.dataset.coll, el.dataset.id); UI.closeSheet(); render(); UI.toast('Eliminado'); },
     'add-envelope': () => UI.envelopeForm(),
     'open-envelope': el => UI.envelopeDetail(el.dataset.id),
     'edit-envelope': el => UI.envelopeForm(Store.state.envelopes.find(x => x.id === el.dataset.id)),
@@ -104,20 +114,23 @@
       const mag = Math.abs(+d.amount || 0);
       const amount = d.sign === 'deduccion' ? -mag : mag;
       const obj = { name: d.name || 'Movimiento', amount, type: d.type, day: +d.day || null, active: true };
+      if (!id) obj.since = UI.period;                 // vigente desde el mes en que se crea
       id ? Store.update('incomes', id, obj) : Store.add('incomes', obj);
     },
     fixed: (d, id) => {
       const obj = { name: d.name || 'Gasto', amount: +d.amount || 0, category: d.category,
         dueDay: Math.max(1, Math.min(31, +d.dueDay || 1)), everyMonths: +d.everyMonths || 1 };
-      if (obj.everyMonths > 1 && !id) obj.anchor = Store.monthKey();
+      if (!id) { obj.since = UI.period; if (obj.everyMonths > 1) obj.anchor = UI.period; }
       id ? Store.update('fixed', id, obj) : Store.add('fixed', obj);
     },
-    market: d => Store.add('market', { category: d.category, item: d.item, qty: +d.qty || null, unit: d.unit || '', amount: +d.amount || 0, date: d.date || Store.dayKey() }),
-    variable: d => Store.add('variable', { category: d.category, description: d.description, amount: +d.amount || 0, date: d.date || Store.dayKey() }),
+    market: (d, id) => { const obj = { category: d.category, item: d.item, qty: +d.qty || null, unit: d.unit || '', amount: +d.amount || 0, date: d.date || Store.dayKey() };
+      id ? Store.update('market', id, obj) : Store.add('market', obj); },
+    variable: (d, id) => { const obj = { category: d.category, description: d.description, amount: +d.amount || 0, date: d.date || Store.dayKey() };
+      id ? Store.update('variable', id, obj) : Store.add('variable', obj); },
     envelope: (d, id) => { const obj = { name: d.name || 'Sobre', total: +d.total || 0, emoji: d.emoji || '🎯' }; const e = id ? Store.updateEnvelope(id, obj) : Store.addEnvelope(obj); return e ? e.id : null; },
     'env-item': d => { if ((+d.amount || 0) !== 0) Store.addEnvItem(d.env, { desc: d.desc, amount: +d.amount || 0 }); },
     budget: d => { if (d.key) Store.setBudget(d.key, +d.amount || 0); },
-    saving: d => { const amt = +d.amount || 0; if (amt > 0) Store.state.savingsLog.push({ id: Store.uid(), period: Store.monthKey(), amount: amt, date: Store.dayKey() }), Store.save(); },
+    saving: d => { const amt = +d.amount || 0; if (amt > 0) Store.state.savingsLog.push({ id: Store.uid(), period: UI.period, amount: amt, date: Store.dayKey() }), Store.save(); },
     settings: d => {
       Object.assign(Store.settings, { currency: d.currency, savingsMode: d.savingsMode,
         savingsValue: +d.savingsValue || 0, alertDays: Math.max(0, +d.alertDays || 0),
@@ -133,6 +146,8 @@
 
   /* ---------- listeners ---------- */
   document.addEventListener('click', e => {
+    const mn = e.target.closest('[data-month]');
+    if (mn) { UI.period = Store.shiftPeriod(UI.period, Number(mn.dataset.month)); render(); return; }
     const nav = e.target.closest('[data-route]');
     if (nav) { go(nav.dataset.route); return; }
     const tab = e.target.closest('[data-tab]');
@@ -172,6 +187,15 @@
     });
   }
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { updateChrome(); if (Store.settings.notif) Notif.checkAndNotify(); } });
+  /* ---------- splash animado (nombre + logo) ---------- */
+  (function splash() {
+    const el = document.getElementById('splash');
+    if (!el) return;
+    const done = () => { if (el.classList.contains('hide')) return; el.classList.add('hide'); setTimeout(() => el.remove(), 650); };
+    el.addEventListener('click', done);
+    setTimeout(done, 2100);
+  })();
+
   render();
   if (!document.body.classList.contains('gate') && !Store.settings.onboarded && Store.state.incomes.length === 0) UI.onboarding();
   if (Store.settings.notif) Notif.schedule();
