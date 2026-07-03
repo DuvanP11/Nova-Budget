@@ -36,30 +36,37 @@ const Cloud = (() => {
     });
   }
 
+  let pending = null;      // {resolve,reject} del getToken en curso
+  let lastError = null;
+
   async function init() {
     if (!enabled()) return;
     try { await waitGIS(); } catch { return; }
     tokenClient = google.accounts.oauth2.initTokenClient({
       client_id: CLIENT_ID, scope: SCOPES,
-      callback: () => {}, // se reemplaza por promesa en getToken()
+      callback: resp => {
+        const p = pending; pending = null; if (!p) return;
+        if (resp && resp.error) return p.reject(new Error('auth: ' + resp.error));
+        accessToken = resp.access_token;
+        tokenExp = Date.now() + (Number(resp.expires_in || 3600) * 1000);
+        p.resolve(accessToken);
+      },
+      error_callback: err => {
+        const p = pending; pending = null; if (!p) return;
+        p.reject(new Error('login: ' + ((err && (err.type || err.message)) || 'cancelado')));
+      },
     });
     ready = true;
-    // Reintento silencioso si el usuario ya estaba conectado
-    if (loadPref().connected) { connect(false).catch(() => {}); }
+    if (loadPref().connected) { connect(false).catch(() => {}); } // reintento silencioso
   }
 
   function getToken(interactive) {
     return new Promise((resolve, reject) => {
-      if (!tokenClient) return reject(new Error('sin tokenClient'));
+      if (!tokenClient) return reject(new Error('Google no cargó'));
       if (accessToken && Date.now() < tokenExp - 60000) return resolve(accessToken);
-      tokenClient.callback = resp => {
-        if (resp.error) return reject(resp);
-        accessToken = resp.access_token;
-        tokenExp = Date.now() + (Number(resp.expires_in || 3600) * 1000);
-        resolve(accessToken);
-      };
+      pending = { resolve, reject };
       try { tokenClient.requestAccessToken({ prompt: interactive ? 'consent' : '' }); }
-      catch (e) { reject(e); }
+      catch (e) { pending = null; reject(e); }
     });
   }
 
@@ -76,6 +83,14 @@ const Cloud = (() => {
     return r;
   }
 
+  async function fail(r, ctx) {
+    let detail = ''; try { const j = await r.json(); detail = (j.error && j.error.message) || ''; } catch {}
+    let hint = '';
+    if (r.status === 403 && /has not been used|is disabled|accessNotConfigured/i.test(detail)) hint = ' — falta HABILITAR la API de Google Drive';
+    else if (r.status === 403) hint = ' — permiso de Drive no concedido';
+    throw new Error(`${ctx} ${r.status}${detail ? ': ' + detail.slice(0, 90) : ''}${hint}`);
+  }
+
   async function fetchEmail() {
     try {
       const r = await api('https://www.googleapis.com/oauth2/v3/userinfo');
@@ -87,13 +102,13 @@ const Cloud = (() => {
   async function findFile() {
     const q = encodeURIComponent(`name='${FILENAME}'`);
     const r = await api(`https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&fields=files(id,modifiedTime)&q=${q}`);
-    if (!r.ok) throw new Error('list ' + r.status);
+    if (!r.ok) await fail(r, 'Drive');
     const j = await r.json();
     return (j.files && j.files[0]) || null;
   }
   async function downloadFile(id) {
     const r = await api(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`);
-    if (!r.ok) throw new Error('download ' + r.status);
+    if (!r.ok) await fail(r, 'Descargar');
     return await r.json();
   }
   async function uploadFile(obj) {
@@ -101,7 +116,7 @@ const Cloud = (() => {
     if (fileId) {
       const r = await api(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`,
         { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body });
-      if (!r.ok) throw new Error('update ' + r.status);
+      if (!r.ok) await fail(r, 'Guardar');
       return fileId;
     }
     // crear en appDataFolder (multipart: metadata + contenido)
@@ -112,20 +127,22 @@ const Cloud = (() => {
       `--${boundary}\r\nContent-Type: application/json\r\n\r\n${body}\r\n--${boundary}--`;
     const r = await api('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',
       { method: 'POST', headers: { 'Content-Type': `multipart/related; boundary=${boundary}` }, body: multipart });
-    if (!r.ok) throw new Error('create ' + r.status);
+    if (!r.ok) await fail(r, 'Crear');
     const j = await r.json(); fileId = j.id; return fileId;
   }
 
-  // Conecta: obtiene token, email y sincroniza (pull/push según fecha)
+  // Conecta: el login queda activo aunque el primer guardado falle
   async function connect(interactive = true) {
     if (!enabled()) throw new Error('Google no configurado');
     if (!ready) await init();
-    await getToken(interactive);
+    await getToken(interactive);           // aquí sí se propaga si el login falla
     email = await fetchEmail();
     savePref({ connected: true, email });
-    await syncNow();
     subscribe();
-    emit();
+    emit();                                 // ya está logueado
+    lastError = null;
+    try { await syncNow(); }                // el sync es aparte: si falla, guardamos el error
+    catch (e) { lastError = e; console.warn('sync falló:', e); throw e; }
     return email;
   }
 
@@ -169,5 +186,6 @@ const Cloud = (() => {
     enabled, connected, init, connect, disconnect, syncNow,
     get email() { return email || loadPref().email || null; },
     get lastSync() { return loadPref().lastSync || null; },
+    get lastError() { return lastError; },
   };
 })();

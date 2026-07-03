@@ -9,7 +9,7 @@ const UI = (() => {
   let toastT;
   function toast(msg) {
     const el = $('#toast'); el.textContent = msg; el.hidden = false;
-    clearTimeout(toastT); toastT = setTimeout(() => el.hidden = true, 2600);
+    clearTimeout(toastT); toastT = setTimeout(() => el.hidden = true, 5000);
   }
 
   /* ---------- sheets / modales ---------- */

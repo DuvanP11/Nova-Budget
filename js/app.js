@@ -54,10 +54,15 @@
     'add-env-item': el => UI.envItemForm(el.dataset.env),
     'del-env-item': el => { Store.removeEnvItem(el.dataset.env, el.dataset.id); UI.envelopeDetail(el.dataset.env); },
     'enter-local': () => { Store.settings.entered = true; Store.save(); render(); if (!Store.state.incomes.length && !Store.settings.onboarded) UI.onboarding(); },
-    'enter-google': async () => { UI.toast('Abriendo Google…'); try { await Cloud.connect(true); Store.settings.entered = true; Store.save(); render(); if (!Store.state.incomes.length && !Store.settings.onboarded) UI.onboarding(); UI.toast('Conectado ✓'); } catch (e) { console.warn(e); UI.toast('No se pudo conectar con Google'); } },
-    'cloud-login': async () => { UI.toast('Abriendo Google…'); try { await Cloud.connect(true); render(); UI.settingsSheet(); UI.toast('Conectado ✓'); } catch (e) { console.warn(e); UI.toast('No se pudo conectar con Google'); } },
+    'enter-google': async () => {
+      UI.toast('Abriendo Google…');
+      const enter = () => { Store.settings.entered = true; Store.save(); render(); if (!Store.state.incomes.length && !Store.settings.onboarded) UI.onboarding(); };
+      try { await Cloud.connect(true); enter(); UI.toast('Conectado ✓'); }
+      catch (e) { console.warn(e); if (Cloud.connected()) { enter(); UI.toast('Entraste, pero el guardado falló: ' + (e.message || '')); } else UI.toast('Google: ' + (e && e.message || 'error')); }
+    },
+    'cloud-login': async () => { UI.toast('Abriendo Google…'); try { await Cloud.connect(true); render(); UI.settingsSheet(); UI.toast('Conectado ✓'); } catch (e) { console.warn(e); render(); UI.settingsSheet(); UI.toast((Cloud.connected() ? 'Conectado, sync falló: ' : 'Error: ') + (e.message || 'error')); } },
     'cloud-logout': () => { Cloud.disconnect(); UI.settingsSheet(); UI.toast('Sesión cerrada'); },
-    'cloud-sync': async () => { UI.toast('Sincronizando…'); try { await Cloud.syncNow(); render(); UI.settingsSheet(); UI.toast('Sincronizado ✓'); } catch (e) { console.warn(e); UI.toast('Error al sincronizar'); } },
+    'cloud-sync': async () => { UI.toast('Sincronizando…'); try { await Cloud.syncNow(); render(); UI.settingsSheet(); UI.toast('Sincronizado ✓'); } catch (e) { console.warn(e); UI.toast('Error: ' + (e.message || 'sync')); } },
     'add-budget': () => UI.budgetForm(),
     'edit-budget': el => UI.budgetForm(el.dataset.key),
     'del-budget': el => { Store.removeBudget(el.dataset.key); UI.closeSheet(); render(); UI.toast('Presupuesto eliminado'); },

@@ -1,5 +1,5 @@
 /* ===== Nova Budget — Service Worker (offline + notificaciones) ===== */
-const CACHE = 'nova-budget-v11';
+const CACHE = 'nova-budget-v12';
 const ASSETS = [
   './', './index.html',
   './css/styles.css',
