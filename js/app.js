@@ -50,6 +50,9 @@
     'del-envelope': el => { if (confirm('¿Eliminar este sobre?')) { Store.removeEnvelope(el.dataset.id); UI.closeSheet(); render(); UI.toast('Sobre eliminado'); } },
     'add-env-item': el => UI.envItemForm(el.dataset.env),
     'del-env-item': el => { Store.removeEnvItem(el.dataset.env, el.dataset.id); UI.envelopeDetail(el.dataset.env); },
+    'add-budget': () => UI.budgetForm(),
+    'edit-budget': el => UI.budgetForm(el.dataset.key),
+    'del-budget': el => { Store.removeBudget(el.dataset.key); UI.closeSheet(); render(); UI.toast('Presupuesto eliminado'); },
     'open-alerts': () => UI.alertsSheet(),
     'close': () => UI.closeSheet(),
     'paid': el => { Store.togglePaid(el.dataset.id, el.dataset.period); render(); },
@@ -100,10 +103,12 @@
     variable: d => Store.add('variable', { category: d.category, description: d.description, amount: +d.amount || 0, date: d.date || Store.dayKey() }),
     envelope: (d, id) => { const obj = { name: d.name || 'Sobre', total: +d.total || 0, emoji: d.emoji || '🎯' }; const e = id ? Store.updateEnvelope(id, obj) : Store.addEnvelope(obj); return e ? e.id : null; },
     'env-item': d => { if ((+d.amount || 0) !== 0) Store.addEnvItem(d.env, { desc: d.desc, amount: +d.amount || 0 }); },
+    budget: d => { if (d.key) Store.setBudget(d.key, +d.amount || 0); },
     saving: d => { const amt = +d.amount || 0; if (amt > 0) Store.state.savingsLog.push({ id: Store.uid(), period: Store.monthKey(), amount: amt, date: Store.dayKey() }), Store.save(); },
     settings: d => {
       Object.assign(Store.settings, { currency: d.currency, savingsMode: d.savingsMode,
-        savingsValue: +d.savingsValue || 0, alertDays: Math.max(0, +d.alertDays || 0) });
+        savingsValue: +d.savingsValue || 0, alertDays: Math.max(0, +d.alertDays || 0),
+        budgetAlertPct: Math.min(100, Math.max(1, +d.budgetAlertPct || 80)) });
       Store.save();
     },
     onboard: d => {

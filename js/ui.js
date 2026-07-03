@@ -242,6 +242,8 @@ const UI = (() => {
       <div class="sub">${all.length} compra${all.length !== 1 ? 's' : ''} registrada${all.length !== 1 ? 's' : ''}</div>
     </div>
 
+    ${(() => { const mb = Store.budgetsList().filter(b => b.key.startsWith('market:')); return mb.length ? `<div class="section-title">Presupuesto de mercado</div><div class="list">${mb.map(budgetMeter).join('')}</div>` : ''; })()}
+
     ${byCat.length ? `<div class="section-title">Por tipo de producto</div>
     <div class="card"><div class="row" style="align-items:center">
       <div style="flex:none">${Charts.donut(byCat, { size: 130 })}</div>
@@ -277,6 +279,7 @@ const UI = (() => {
     const proj = Store.projection(12);
     const market = Store.marketByCategory();
     return `
+    ${budgetsBlock()}
     <div class="section-title">Gasto por área · ${Store.monthName(s.period)}</div>
     ${bd.length ? `<div class="card"><div class="row" style="align-items:center">
       <div style="flex:none">${Charts.donut(bd, { size: 140 })}</div>
@@ -414,6 +417,55 @@ const UI = (() => {
   }
 
   /* =========================================================
+     PRESUPUESTOS (medidores + formulario)
+     ========================================================= */
+  function budgetMeter(b) {
+    const col = b.status === 'over' ? 'var(--red)' : b.status === 'warn' ? 'var(--accent)' : 'var(--lime)';
+    return `<div class="li" data-action="edit-budget" data-key="${b.key}" style="flex-direction:column;align-items:stretch;gap:9px">
+      <div class="spread">
+        <div class="card-title" style="font-size:14px">${b.emoji} ${esc(b.label)}</div>
+        <div style="color:${col};font-weight:800;font-family:var(--font-head)">${b.pct}%</div>
+      </div>
+      <div class="progresswrap"><div class="progressfill" style="width:${Math.min(100, b.pct)}%;background:${col}"></div></div>
+      <div class="spread small muted"><span>${money(b.spent)} de ${money(b.limit)}</span>
+        <span style="color:${b.left < 0 ? 'var(--red)' : 'inherit'}">${b.left >= 0 ? 'quedan ' + money(b.left) : 'excedido ' + money(-b.left)}</span></div>
+    </div>`;
+  }
+  function budgetsBlock() {
+    const list = Store.budgetsList();
+    return `<div class="section-title">Presupuestos del mes</div>
+    ${list.length ? `<div class="list">${list.map(budgetMeter).join('')}</div>`
+      : `<div class="card muted small center">Sin topes aún. Ponle un límite a una categoría (ej. mercado) y te aviso al ${Store.settings.budgetAlertPct}%.</div>`}
+    <button class="btn ghost block mt16" data-action="add-budget">＋ Nuevo presupuesto</button>`;
+  }
+  function budgetCatOptions(selected) {
+    const groups = [
+      { label: 'General', items: [{ v: 'total', t: '📅 Gasto total del mes' }] },
+      { label: 'Mercado', items: [{ v: 'market:total', t: '🛒 Mercado (total)' }].concat(Store.MARKET_CATS.map(c => ({ v: 'market:' + c.key, t: c.emoji + ' Mercado · ' + c.name }))) },
+      { label: 'Gastos variables', items: Store.VAR_CATS.map(c => ({ v: 'var:' + c.key, t: c.emoji + ' ' + c.name })) },
+      { label: 'Gastos fijos', items: Store.FIXED_CATS.map(c => ({ v: 'fixed:' + c.key, t: c.emoji + ' ' + c.name })) },
+    ];
+    return groups.map(g => `<optgroup label="${g.label}">${g.items.map(o => `<option value="${o.v}" ${o.v === selected ? 'selected' : ''}>${o.t}</option>`).join('')}</optgroup>`).join('');
+  }
+  function budgetForm(key) {
+    const editing = key && Store.state.budgets[key] != null;
+    const cur = editing ? Store.state.budgets[key] : '';
+    openSheet(`<h2>${editing ? 'Editar' : 'Nuevo'} presupuesto</h2><p class="muted">Ponle un tope mensual a una categoría y te aviso al acercarte.</p>
+    <form data-form="budget">
+      <div class="field"><label>Categoría</label>
+        <select name="${editing ? 'keyx' : 'key'}" ${editing ? 'disabled' : ''}>${budgetCatOptions(key)}</select>
+        ${editing ? `<input type="hidden" name="key" value="${key}">` : ''}
+      </div>
+      ${num('amount', 'Tope mensual', cur)}
+      <div class="form-actions">
+        <button type="button" class="btn ghost block" data-action="close">Cancelar</button>
+        <button type="submit" class="btn primary block">Guardar</button>
+      </div>
+      ${editing ? `<button type="button" class="btn danger block mt8" data-action="del-budget" data-key="${esc(key)}">Eliminar presupuesto</button>` : ''}
+    </form>`);
+  }
+
+  /* =========================================================
      FORMULARIOS (sheets)
      ========================================================= */
   function num(id, label, val = '', hint = '') {
@@ -532,6 +584,7 @@ const UI = (() => {
       <div class="field"><label>Regla de ahorro</label><select name="savingsMode">${opts([{ v: 'percent', t: 'Porcentaje del ingreso' }, { v: 'fixed', t: 'Monto fijo' }], st.savingsMode)}</select></div>
       ${num('savingsValue', 'Ahorro mínimo mensual', st.savingsValue, 'Si es porcentaje, escribe 10, 20, etc.')}
       ${num('alertDays', 'Avisarme X días antes de un pago', st.alertDays)}
+      ${num('budgetAlertPct', 'Avisarme al llegar a este % del presupuesto', st.budgetAlertPct, 'Ej. 80 = te aviso al gastar el 80% del tope.')}
       <div class="form-actions"><button type="submit" class="btn primary block">Guardar ajustes</button></div>
     </form>
     <div class="divider"></div>
@@ -568,7 +621,7 @@ const UI = (() => {
   return {
     inicio, ingresos, gastos, mercado, stats, sobres,
     incomeForm, fixedForm, marketForm, variableForm, savingForm,
-    envelopeForm, envelopeDetail, envItemForm,
+    envelopeForm, envelopeDetail, envItemForm, budgetForm,
     alertsSheet, settingsSheet, onboarding,
     openSheet, closeSheet, toast,
     get gastosTab() { return gastosTab; }, set gastosTab(v) { gastosTab = v; },

@@ -9,9 +9,11 @@ const Store = (() => {
       savingsMode: 'percent',   // 'percent' | 'fixed'
       savingsValue: 20,         // % o monto
       alertDays: 3,             // avisar N días antes
+      budgetAlertPct: 80,       // avisar al llegar a este % del presupuesto
       notif: false,
       onboarded: false,
     },
+    budgets: {},   // { '<scope>': montoTope }  scope: 'total' | 'market:total' | 'market:<cat>' | 'var:<cat>' | 'fixed:<cat>'
     incomes: [],   // {id,name,amount,type:'fijo'|'variable',day,active}  (amount<0 = deducción)
     fixed: [],     // {id,name,category,amount,dueDay,everyMonths,anchor:'YYYY-MM',emoji}
     market: [],    // {id,date:'YYYY-MM-DD',category,item,qty,unit,amount}
@@ -240,6 +242,10 @@ const Store = (() => {
       list.push({ type: 'savings', title: 'Meta de ahorro', msg: `Te falta apartar ${money(s.savingsGap)} este mes` });
     }
     if (s.freeNoSave < 0) list.push({ type: 'over', title: '¡Cuidado! Gastos > ingresos', msg: `Vas ${money(-s.freeNoSave)} por encima de lo que ganas` });
+    budgetsList().forEach(b => {
+      if (b.status === 'over') list.push({ type: 'budget', title: `Presupuesto excedido: ${b.label}`, msg: `Llevas ${money(b.spent)} de ${money(b.limit)} (${b.pct}%)` });
+      else if (b.status === 'warn') list.push({ type: 'budget', title: `Vas al ${b.pct}% en ${b.label}`, msg: `${money(b.spent)} de ${money(b.limit)} · te quedan ${money(b.left)}` });
+    });
     return list;
   }
 
@@ -264,6 +270,49 @@ const Store = (() => {
     }
     return out;
   }
+
+  /* ---------- presupuestos por categoría ---------- */
+  function budgetSpent(key, period = monthKey()) {
+    if (key === 'total') return summary(period).spent;
+    const [dom, cat] = key.split(':');
+    if (dom === 'market') {
+      const list = marketOf(period);
+      return (cat === 'total' ? list : list.filter(m => m.category === cat)).reduce((s, m) => s + Number(m.amount || 0), 0);
+    }
+    if (dom === 'var') {
+      const list = variableOf(period);
+      return (cat === 'total' ? list : list.filter(v => v.category === cat)).reduce((s, v) => s + Number(v.amount || 0), 0);
+    }
+    if (dom === 'fixed') {
+      return state.fixed.filter(f => f.category === cat && fixedDueInPeriod(f, period)).reduce((s, f) => s + Number(f.amount || 0), 0);
+    }
+    return 0;
+  }
+  function budgetMeta(key) {
+    if (key === 'total') return { label: 'Gasto total del mes', emoji: '📅' };
+    const [dom, cat] = key.split(':');
+    if (dom === 'market' && cat === 'total') return { label: 'Mercado (total)', emoji: '🛒' };
+    if (dom === 'market') { const c = MARKET_CATS.find(x => x.key === cat); return { label: 'Mercado · ' + (c ? c.name : cat), emoji: c ? c.emoji : '🛒' }; }
+    if (dom === 'var') { const c = VAR_CATS.find(x => x.key === cat); return { label: c ? c.name : cat, emoji: c ? c.emoji : '💳' }; }
+    if (dom === 'fixed') { const c = fixedCat(cat); return { label: c.name, emoji: c.emoji }; }
+    return { label: key, emoji: '🎯' };
+  }
+  function budgetsList(period = monthKey()) {
+    const pctAlert = Number(state.settings.budgetAlertPct) || 80;
+    return Object.entries(state.budgets).filter(([, v]) => Number(v) > 0).map(([key, limit]) => {
+      limit = Number(limit);
+      const spent = budgetSpent(key, period);
+      const pct = limit > 0 ? Math.round(spent / limit * 100) : 0;
+      const status = pct >= 100 ? 'over' : pct >= pctAlert ? 'warn' : 'ok';
+      return { key, limit, spent, left: limit - spent, pct, status, ...budgetMeta(key) };
+    }).sort((a, b) => b.pct - a.pct);
+  }
+  function setBudget(key, amount) {
+    amount = Number(amount) || 0;
+    if (amount > 0) state.budgets[key] = amount; else delete state.budgets[key];
+    save();
+  }
+  function removeBudget(key) { delete state.budgets[key]; save(); }
 
   /* ---------- ingresos: bruto / deducciones / neto ---------- */
   function incomeBreakdown() {
@@ -347,6 +396,7 @@ const Store = (() => {
     marketByCategory, spendBreakdown, fixedDueInPeriod, nextDueDate,
     isPaid, togglePaid, marketOf, variableOf, daysBetween,
     incomeBreakdown,
+    budgetSpent, budgetMeta, budgetsList, setBudget, removeBudget,
     envSummary, addEnvelope, updateEnvelope, removeEnvelope, addEnvItem, removeEnvItem,
     exportJSON, importJSON, reset, seedDemo,
     MARKET_CATS, VAR_CATS, FIXED_CATS, fixedCat,
