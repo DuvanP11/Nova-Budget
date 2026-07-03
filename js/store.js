@@ -238,8 +238,14 @@ const Store = (() => {
       else if (u.days <= (state.settings.alertDays || 3)) list.push({ type: 'soon', title: `Pronto: ${u.ref.name}`, msg: `${money(u.ref.amount)} — ${u.days === 0 ? 'vence hoy' : u.days === 1 ? 'vence mañana' : 'en ' + u.days + ' días'}`, ref: u });
     });
     const s = summary();
-    if (s.income > 0 && s.savingsGap > 0 && now().getDate() >= 20) {
-      list.push({ type: 'savings', title: 'Meta de ahorro', msg: `Te falta apartar ${money(s.savingsGap)} este mes` });
+    if (s.income > 0 && s.savingsGap > 0) {
+      const pay = mainPayday();
+      const today = now().getDate();
+      if (pay && today >= Math.min(pay, 28)) {
+        list.push({ type: 'savings', title: 'Aparta tu ahorro 💰', msg: `Ya te pagaron: aparta ${money(s.savingsGap)} de tu meta de este mes` });
+      } else if (today >= 22) {
+        list.push({ type: 'savings', title: 'Meta de ahorro', msg: `Te falta apartar ${money(s.savingsGap)} antes de fin de mes` });
+      }
     }
     if (s.freeNoSave < 0) list.push({ type: 'over', title: '¡Cuidado! Gastos > ingresos', msg: `Vas ${money(-s.freeNoSave)} por encima de lo que ganas` });
     budgetsList().forEach(b => {
@@ -336,6 +342,60 @@ const Store = (() => {
   function addEnvItem(envId, item) { const e = state.envelopes.find(x => x.id === envId); if (e) { item.id = uid(); (e.items = e.items || []).unshift(item); save(); } }
   function removeEnvItem(envId, itemId) { const e = state.envelopes.find(x => x.id === envId); if (e) { e.items = (e.items || []).filter(i => i.id !== itemId); save(); } }
 
+  /* ---------- semana, resumen e insights inteligentes ---------- */
+  function startOfWeek(d = now()) { const x = startOfDay(d); const off = (x.getDay() + 6) % 7; x.setDate(x.getDate() - off); return x; } // lunes
+  function weekKey(d = now()) { return dayKey(startOfWeek(d)); }
+  function sumDaily(from, to) {
+    const inRange = ds => { const t = new Date(ds + 'T00:00'); return t >= from && t < to; };
+    const m = state.market.filter(x => inRange(x.date)).reduce((s, x) => s + (Number(x.amount) || 0), 0);
+    const v = state.variable.filter(x => inRange(x.date)).reduce((s, x) => s + (Number(x.amount) || 0), 0);
+    return m + v;
+  }
+  function weeklyStats() {
+    const sow = startOfWeek();
+    const nextWeek = new Date(sow); nextWeek.setDate(sow.getDate() + 7);
+    const prevStart = new Date(sow); prevStart.setDate(sow.getDate() - 7);
+    const thisWeek = sumDaily(sow, nextWeek);
+    const prevWeek = sumDaily(prevStart, sow);
+    return { thisWeek, prevWeek, diff: thisWeek - prevWeek, sow };
+  }
+  function mainPayday() {
+    const pos = state.incomes.filter(i => i.active !== false && Number(i.amount) > 0 && i.day);
+    if (!pos.length) return null;
+    pos.sort((a, b) => Number(b.amount) - Number(a.amount));
+    return pos[0].day;
+  }
+  function topCategoryMonth(period = monthKey()) {
+    const map = {};
+    marketOf(period).forEach(m => { const k = 'market:' + m.category; map[k] = (map[k] || 0) + (Number(m.amount) || 0); });
+    variableOf(period).forEach(v => { const k = 'var:' + v.category; map[k] = (map[k] || 0) + (Number(v.amount) || 0); });
+    state.fixed.filter(f => fixedDueInPeriod(f, period)).forEach(f => { const k = 'fixed:' + f.category; map[k] = (map[k] || 0) + (Number(f.amount) || 0); });
+    let best = null;
+    Object.entries(map).forEach(([k, val]) => { if (val > 0 && (!best || val > best.value)) best = { key: k, value: val }; });
+    return best ? { ...budgetMeta(best.key), value: best.value } : null;
+  }
+  function insights() {
+    const out = [], s = summary(), w = weeklyStats(), top = topCategoryMonth();
+    const daysInMonth = new Date(now().getFullYear(), now().getMonth() + 1, 0).getDate();
+    const daysLeft = Math.max(0, daysInMonth - now().getDate());
+    if (s.income <= 0) { out.push({ e: '👋', t: 'Agrega tus ingresos para ver tu panorama y calcular tu meta de ahorro.' }); return out; }
+    if (s.freeNoSave < 0) out.push({ e: '⚠️', t: `Estás gastando ${money(-s.freeNoSave)} más de lo que ganas este mes. Revisa tus gastos variables.` });
+    if (s.savingsTarget > 0 && s.savingsGap <= 0) out.push({ e: '🎉', t: `¡Cumpliste tu meta de ahorro de ${money(s.savingsTarget)} este mes! Vas muy bien.` });
+    else if (s.savingsGap > 0) { const pay = mainPayday(); const paid = pay && now().getDate() >= Math.min(pay, 28); out.push({ e: '💰', t: `Te faltan ${money(s.savingsGap)} para tu meta de ahorro.${paid ? ' Ya te pagaron, ¡apártalo ahora!' : ''}` }); }
+    if (top && s.spent > 0) out.push({ e: top.emoji || '📊', t: `Tu mayor gasto del mes es ${top.label}: ${money(top.value)} (${Math.round(top.value / s.spent * 100)}%).` });
+    if (w.thisWeek > 0 || w.prevWeek > 0) { const tone = w.diff > 0 ? 'más' : 'menos'; out.push({ e: w.diff > 0 ? '📈' : '📉', t: `Esta semana llevas ${money(w.thisWeek)} en gastos diarios, ${money(Math.abs(w.diff))} ${tone} que la semana pasada.` }); }
+    if (s.available > 0 && daysLeft > 0) out.push({ e: '🗓️', t: `Te quedan ${daysLeft} días y ${money(s.available)} disponibles (~${money(Math.round(s.available / daysLeft))}/día).` });
+    return out.slice(0, 4);
+  }
+  function weeklySummaryText() {
+    const s = summary(), w = weeklyStats(), top = topCategoryMonth();
+    let t = `Gastos de la semana: ${money(w.thisWeek)}. Disponible este mes: ${money(s.available)}.`;
+    if (s.savingsGap > 0) t += ` Te faltan ${money(s.savingsGap)} de ahorro.`;
+    else if (s.savingsTarget > 0) t += ` Ahorro del mes cumplido 🎉.`;
+    if (top) t += ` Mayor gasto: ${top.label}.`;
+    return t;
+  }
+
   /* ---------- export / import ---------- */
   function exportJSON() { return JSON.stringify(state, null, 2); }
   function importJSON(text) {
@@ -397,6 +457,7 @@ const Store = (() => {
     isPaid, togglePaid, marketOf, variableOf, daysBetween,
     incomeBreakdown,
     budgetSpent, budgetMeta, budgetsList, setBudget, removeBudget,
+    weekKey, weeklyStats, topCategoryMonth, mainPayday, insights, weeklySummaryText,
     envSummary, addEnvelope, updateEnvelope, removeEnvelope, addEnvItem, removeEnvItem,
     exportJSON, importJSON, reset, seedDemo,
     MARKET_CATS, VAR_CATS, FIXED_CATS, fixedCat,

@@ -56,6 +56,10 @@ const UI = (() => {
       <div class="tile"><div class="k">Libre real</div><div class="v ${availClass}">${money(s.freeNoSave)}</div></div>
     </div>
 
+    ${(() => { const ins = Store.insights(); return ins.length ? `<div class="section-title">Resumen inteligente</div>
+      <div class="list">${ins.map(i => `<div class="li"><div class="ic">${i.e}</div>
+        <div class="mid"><div class="s" style="white-space:normal;color:var(--ink-dim);font-size:13.5px;line-height:1.45">${esc(i.t)}</div></div></div>`).join('')}</div>` : ''; })()}
+
     <div class="section-title">Salud financiera</div>
     <div class="card health">
       <div class="ring">${Charts.ring(h.score, { color: h.color, size: 92 })}</div>

@@ -25,9 +25,20 @@ const Notif = (() => {
     } catch (e) { /* silencioso */ }
   }
 
+  const WEEKKEY = 'bolsillo.notif.week';
+  // Resumen semanal: una vez por semana (al abrir la app en una semana nueva)
+  function maybeWeeklySummary() {
+    if (!granted() || !Store.settings.notif) return;
+    const wk = Store.weekKey();
+    if (localStorage.getItem(WEEKKEY) === wk) return;
+    show('Nova Budget · Resumen de la semana', Store.weeklySummaryText(), 'weekly');
+    localStorage.setItem(WEEKKEY, wk);
+  }
+
   // Revisa alertas y dispara notificaciones no repetidas hoy
   function checkAndNotify() {
     if (!granted() || !Store.settings.notif) return;
+    maybeWeeklySummary();
     const today = Store.dayKey();
     let last = {};
     try { last = JSON.parse(localStorage.getItem(LASTKEY) || '{}'); } catch {}
